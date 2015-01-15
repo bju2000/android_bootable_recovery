@@ -68,6 +68,7 @@ public:
 	void Check_FS_Type();                                                     // Checks the fs type using blkid, does not do anything on MTD / yaffs2 because this crashes on some devices
 	bool Update_Size(bool Display_Error);                                     // Updates size information
 	void Recreate_Media_Folder();                                             // Recreates the /data/media folder
+	bool Flash_Image(string Filename);                                        // Flashes an image to the partition
 
 public:
 	string Current_File_System;                                               // Current file system
@@ -75,6 +76,7 @@ public:
 	string MTD_Name;                                                          // Name of the partition for MTD devices
 	bool Is_Present;                                                          // Indicates if the partition is currently present as a block device
 	string Crypto_Key_Location;                                               // Location of the crypto key used for decrypting encrypted data partitions
+	unsigned int MTP_Storage_ID;
 
 protected:
 	bool Has_Data_Media;                                                      // Indicates presence of /data/media, may affect wiping and backup methods
@@ -107,14 +109,15 @@ private:
 	bool Backup_Dump_Image(string backup_folder);                             // Backs up using dump_image for MTD memory types
 	string Get_Restore_File_System(string restore_folder);                    // Returns the file system that was in place at the time of the backup
 	bool Restore_Tar(string restore_folder, string Restore_File_System, const unsigned long long *total_restore_size, unsigned long long *already_restored_size); // Restore using tar for file systems
-	bool Restore_DD(string restore_folder, const unsigned long long *total_restore_size, unsigned long long *already_restored_size); // Restore using dd for emmc memory types
-	bool Restore_Flash_Image(string restore_folder, const unsigned long long *total_restore_size, unsigned long long *already_restored_size); // Restore using flash_image for MTD memory types
+	bool Restore_Image(string restore_folder, const unsigned long long *total_restore_size, unsigned long long *already_restored_size, string Restore_File_System); // Restore using dd for images
 	bool Get_Size_Via_statfs(bool Display_Error);                             // Get Partition size, used, and free space using statfs
 	bool Get_Size_Via_df(bool Display_Error);                                 // Get Partition size, used, and free space using df command
 	bool Make_Dir(string Path, bool Display_Error);                           // Creates a directory if it doesn't already exist
 	bool Find_MTD_Block_Device(string MTD_Name);                              // Finds the mtd block device based on the name from the fstab
 	void Recreate_AndSec_Folder(void);                                        // Recreates the .android_secure folder
 	void Mount_Storage_Retry(void);                                           // Tries multiple times with a half second delay to mount a device in case storage is slow to mount
+	bool Flash_Image_DD(string Filename);                                     // Flashes an image to the partition using dd
+	bool Flash_Image_FI(string Filename);                                     // Flashes an image to the partition using flash_image for mtd nand
 
 private:
 	bool Can_Be_Mounted;                                                      // Indicates that the partition can be mounted
@@ -162,6 +165,7 @@ private:
 	int Format_Block_Size;                                                    // Block size for formatting
 	bool Ignore_Blkid;                                                        // Ignore blkid results due to superblocks lying to us on certain devices / partitions
 	bool Retain_Layout_Version;                                               // Retains the .layout_version file during a wipe (needed on devices like Sony Xperia T where /data and /data/media are separate partitions)
+	bool Can_Flash_Img;                                                       // Indicates if this partition can have images flashed to it via the GUI
 
 friend class TWPartitionManager;
 friend class DataManager;
@@ -214,6 +218,11 @@ public:
 	void Output_Storage_Fstab();                                              // Creates a /cache/recovery/storage.fstab file with a list of all potential storage locations for app use
 	bool Enable_MTP();                                                        // Enables MTP
 	bool Disable_MTP();                                                       // Disables MTP
+	bool Add_MTP_Storage(string Mount_Point);                                 // Adds or removes an MTP Storage partition
+	bool Add_MTP_Storage(unsigned int Storage_ID);                            // Adds or removes an MTP Storage partition
+	bool Remove_MTP_Storage(string Mount_Point);                              // Adds or removes an MTP Storage partition
+	bool Remove_MTP_Storage(unsigned int Storage_ID);                         // Adds or removes an MTP Storage partition
+	bool Flash_Image(string Filename);                                        // Flashes an image to a selected partition from the partition list
 
 private:
 	void Setup_Settings_Storage_Partition(TWPartition* Part);                 // Sets up settings storage
@@ -222,10 +231,13 @@ private:
 	bool Backup_Partition(TWPartition* Part, string Backup_Folder, bool generate_md5, unsigned long long* img_bytes_remaining, unsigned long long* file_bytes_remaining, unsigned long *img_time, unsigned long *file_time, unsigned long long *img_bytes, unsigned long long *file_bytes);
 	bool Restore_Partition(TWPartition* Part, string Restore_Name, int partition_count, const unsigned long long *total_restore_size, unsigned long long *already_restored_size);
 	void Output_Partition(TWPartition* Part);
+	TWPartition* Find_Partition_By_MTP_Storage_ID(unsigned int Storage_ID);   // Returns a pointer to a partition based on MTP Storage ID
+	bool Add_Remove_MTP_Storage(TWPartition* Part, int message_type);   // Adds or removes an MTP Storage partition
 	TWPartition* Find_Next_Storage(string Path, string Exclude);
 	int Open_Lun_File(string Partition_Path, string Lun_File);
 	pid_t mtppid;
 	bool mtp_was_enabled;
+	int mtp_write_fd;
 
 private:
 	std::vector<TWPartition*> Partitions;                                     // Vector list of all partitions
